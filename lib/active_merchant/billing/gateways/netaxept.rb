@@ -10,7 +10,7 @@ module ActiveMerchant #:nodoc:
       self.supported_countries = ['NO', 'DK', 'SE', 'FI']
       
       # The card types supported by the payment gateway
-      self.supported_cardtypes = [:visa, :master, :american_express]
+      self.supported_cardtypes = [:visa, :master, :american_express, :diners_club, :maestro, :bank_axess]
       
       # The homepage URL of the gateway
       self.homepage_url = 'http://www.betalingsterminal.no/Netthandel-forside/'
@@ -26,7 +26,20 @@ module ActiveMerchant #:nodoc:
         requires!(options, :login, :password)
         @options = options
         super
-      end  
+      end
+      
+      
+      # Need to get the API info for the merchant hosted solution here.
+      def register(money, creditcard, options = {})
+        requires!(options, :order_id)
+        
+        post = {}
+        add_credentials(post, options)
+        add_transaction(post, options)
+        add_order(post, money, options)
+        commit('Register', post)
+      end
+        
       
       def purchase(money, creditcard, options = {})
         requires!(options, :order_id)
@@ -100,85 +113,63 @@ module ActiveMerchant #:nodoc:
         post[:currencyCode] = (options[:currency] || currency(money))
       end
       
-      CARD_TYPE_PREFIXES = {
-        'visa' => 'v',
-        'master' => 'm',
-        'american_express' => 'a',
-      }
-      def add_creditcard(post, creditcard)
-        brand = Gateway.card_brand(creditcard)
-        prefix = CARD_TYPE_PREFIXES[brand]
-        unless prefix
-          raise ArgumentError.new("Card type #{brand} not supported.")
-        end
-
-        post[:creditcard] = {}
-        post[:creditcard][:"#{prefix}a"] = creditcard.number
-        post[:creditcard][:"#{prefix}m"] = format(creditcard.month, :two_digits)
-        post[:creditcard][:"#{prefix}y"] = format(creditcard.year, :two_digits)
-        post[:creditcard][:"#{prefix}c"] = creditcard.verification_value
-      end
+     
+      # def add_creditcard(post, creditcard)
+      #         brand = Gateway.card_brand(creditcard)
+      #         prefix = CARD_TYPE_PREFIXES[brand]
+      #         unless prefix
+      #           raise ArgumentError.new("Card type #{brand} not supported.")
+      #         end
+      # 
+      #         post[:creditcard] = {}
+      #         post[:creditcard][:"#{prefix}a"] = creditcard.number
+      #         post[:creditcard][:"#{prefix}m"] = format(creditcard.month, :two_digits)
+      #         post[:creditcard][:"#{prefix}y"] = format(creditcard.year, :two_digits)
+      #         post[:creditcard][:"#{prefix}c"] = creditcard.verification_value
+      #       end
       
-      def commit(action, parameters, setup=true)
+      def commit(action, parameters)
         parameters[:action] = action
 
         response = {:success => false}
 
         catch(:exception) do
-          if setup
-            commit_transaction_setup(response, parameters)
-            commit_payment_details(response, parameters)
-            commit_process_setup(response, parameters)
+          
+          case action
+          when 'Register'
+            commit_transaction_register(response, parameters)
+          else
+            commit_transaction(response, parameters)
           end
-          commit_transaction(response, parameters)
           response[:success] = true
         end
         
-        Response.new(response[:success], response[:message], response, :test => test?, :authorization => response[:authorization])
+        
+        Response.new(response[:success], response[:message], response, :test => test?, :transaction_id => response[:message])
       end
       
-      def commit_transaction_setup(response, parameters)
-        response[:setup] = parse(ssl_get(build_url("REST/Setup.aspx", pick(parameters, :merchantId, :token, :serviceType, :amount, :currencyCode, :redirectUrl, :orderNumber, :transactionId))))
+      def commit_transaction_register(response, parameters)
+        response[:setup] = parse(ssl_get(build_url("Netaxept/Register.aspx", parameters)))
         process(response, :setup)
       end
       
-      def commit_payment_details(response, parameters)
-        data = encode(parameters[:creditcard].merge(:BBSePay_transaction => response[:setup]['SetupString']))
-        response[:paymentDetails] = parse(ssl_post(build_url("terminal/default.aspx"), data), false)
-        process(response, :paymentDetails)
-      end
-      
-      def commit_process_setup(response, parameters)
-        result = ssl_get(build_url("REST/ProcessSetup.aspx", pick(parameters, :merchantId, :token, :transactionId).merge(:transactionString => response[:paymentDetails][:result])))
-        response[:processSetup] = parse(result)
-        process(response, :processSetup)
-      end
-      
       def commit_transaction(response, parameters)
-        result = ssl_get(build_url("REST/#{parameters[:action]}.aspx", pick(parameters, :merchantId, :token, :transactionId, :transactionAmount)))
-        response[:action] = parse(result)
-        process(response, :action)
+        true
       end
+      
 
-      def process(response, step)
-        if response[step][:container] =~ /Exception|Error/
-          response[:message] = response[step]['Message']
+      def process(response, key)
+        if response[key][:container] =~ /Exception|Error/
+          response[:message] = response[key]['Message']
           throw :exception
         else
-          message = (response[step]['ResponseText'] || response[step]['ResponseCode'])
-          response[:message] = (message || response[:message])
-          
-          response[:authorization] = response[step]['TransactionId']
+          response[:message] = response[key]["TransactionId"]
         end
       end
       
-      def parse(result, expects_xml=true)
-        if expects_xml || /^</ =~ result
-          doc = REXML::Document.new(result)
-          extract_xml(doc.root).merge(:container => doc.root.name)
-        else
-          {:result => result}
-        end
+      def parse(result)
+        doc = REXML::Document.new(result)
+        extract_xml(doc.root).merge(:container => doc.root.name)
       end
       
       def extract_xml(element)
@@ -220,12 +211,12 @@ module ActiveMerchant #:nodoc:
       end
       
       class Response < Billing::Response
-        attr_reader :error_detail
+        attr_reader :error_detail, :transaction_id
         def initialize(success, message, raw, options)
           super
-          unless success
-            @error_detail = raw[:processSetup]['Result']['ResponseText'] if raw[:processSetup] && raw[:processSetup]['Result']
-          end
+          @transaction_id = options[:transaction_id]
+          # need to add some more decent responses here.
+          # extract error detail if there are errors.
         end
       end
     end
