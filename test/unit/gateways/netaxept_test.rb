@@ -7,7 +7,6 @@ class NetaxeptTest < Test::Unit::TestCase
                  :password => 'password'
                )
 
-    @credit_card = credit_card
     @amount = 100
     
     @options = { 
@@ -18,10 +17,12 @@ class NetaxeptTest < Test::Unit::TestCase
   
   def test_successful_register
     @gateway.expects(:ssl_get).returns(successful_register_response)
-    assert(response = @gateway.register(@amount, @creditcard, @options))
+    assert(response = @gateway.register(@amount, @options))
     assert_instance_of NetaxeptGateway::Response, response
     assert_success response
-    assert_equal('b127f98b77f741fca6bb49981ee6e846', response.transaction_id)
+    assert_equal('b127f98b77f741fca6bb49981ee6e846', response.authorization)
+    assert(response.terminal_url, "Terminal url should exist.")
+    puts response.terminal_url
     assert(response.test?)
   end
   
@@ -200,6 +201,33 @@ class NetaxeptTest < Test::Unit::TestCase
       <RegisterResponse xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
         <TransactionId>b127f98b77f741fca6bb49981ee6e846</TransactionId> 
       </RegisterResponse>)
+  end
+  
+  def successful_auth_response
+    %(<?xml version="1.0" ?>
+    <ProcessResponse xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+        <Operation>AUTH</Operation>
+        <ResponseCode>OK</ResponseCode> 
+       <AuthorizationId>064392</AuthorizationId> 
+       <TransactionId>b127f98b77f741fca6bb49981ee6e846</TransactionId> 
+       <ExecutionTime>2009-12-16T11:17:54.633125+01:00</ExecutionTime> 
+       <MerchantId>9999997</MerchantId>
+    </ProcessResponse>)
+  end
+  
+  def successful_capture_response
+    %(<?xml version="1.0" ?>
+    <ProcessResponse xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema"> 
+       <Operation>CAPTURE</Operation>
+        <ResponseCode>OK</ResponseCode> 
+       <TransactionId>b127f98b77f741fca6bb49981ee6e846</TransactionId> 
+       <ExecutionTime>2009-12-16T11:40:57.601875+01:00</ExecutionTime> 
+       <MerchantId>9999997</MerchantId>
+    </ProcessResponse>)
+  end
+  
+  def successful_purchase_response
+    
   end
   
   

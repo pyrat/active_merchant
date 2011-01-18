@@ -3,11 +3,7 @@ require 'test_helper'
 class RemoteNetaxeptTest < Test::Unit::TestCase
   def setup
     @gateway = NetaxeptGateway.new(fixtures(:netaxept))
-    
-    @amount = 100
-    @credit_card = credit_card('4925000000000004')
-    @declined_card = credit_card('4925000000000087')
-    
+    @amount = 100    
     @options = { 
       :order_id => generate_unique_id
     }
@@ -15,10 +11,11 @@ class RemoteNetaxeptTest < Test::Unit::TestCase
   
   
   def test_successful_register
-    assert(response = @gateway.register(@amount, @creditcard, @options))
+    assert(response = @gateway.register(@amount, @options))
     assert_instance_of NetaxeptGateway::Response, response
     assert_success response
-    assert(response.transaction_id, "There should be a transaction_id.")
+    assert(response.authorization, "There should be a transaction_id.")
+    assert(response.terminal_url, "Should be a terminal url.")
     assert(response.test?)
   end
   
