@@ -162,7 +162,7 @@ module ActiveMerchant #:nodoc:
       def add_terminal_url(response, parameters)
         params = {
           :MerchantID => parameters[:merchantId],
-          :TransactionID => response[:message]
+          :TransactionID => response[:authorization]
         }
         response[:terminal_url] = build_url('terminal/default.aspx', params)
       end
