@@ -168,10 +168,13 @@ module ActiveMerchant #:nodoc:
       # need to add success in here
       def process(response, key)
         if response[key][:container] =~ /Exception|Error/
-          response[:message] = response[key]['Message']
+          response[:message] = response[key]['Error']['Message']
+          response[:authorization] = response[key]['Error']['Result']['TransactionId']
           throw :exception
         else
           response[:authorization] = response[key]["TransactionId"]
+          
+          # This is only run if there wasnt an exception.
           response[:success] = was_successful?(response, key)
         end
       end
