@@ -35,61 +35,67 @@ module ActiveMerchant #:nodoc:
 
         post = {}
         add_credentials(post, options)
-        add_transaction(post, options)
+        add_new_transaction(post, options)
         add_terminal(post, options)
         add_order(post, money, options)
-        commit('Register', post)
+        commit('REGISTER', post)
+      end
+      
+      def purchase(options = {})
+        requires!(options, :transaction_id)
+        
+        post = {}
+        add_credentials(post, options)
+        add_existing_transaction(post, options)
+        commit('SALE', post)
+      end
+      
+      def authorize(options = {})
+        requires!(options, :transaction_id)
+        
+        post = {}
+        add_credentials(post, options)
+        add_existing_transaction(post, options)
+        commit('AUTH', post)
+      end
+      
+      def capture(money, options = {})
+        requires!(options, :transaction_id)
+        
+        post = {}
+        add_credentials(post, options)
+        add_existing_transaction(post, options)
+        add_transaction_amount(post, money)
+        commit('CAPTURE', post)
+      end
+      
+      def credit(money, options = {})
+        requires!(options, :transaction_id)
+        
+        post = {}
+        add_credentials(post, options)
+        add_existing_transaction(post, options)
+        add_transaction_amount(post, money)
+        commit('CREDIT', options)
+      end
+      
+      def void(options = {})
+        requires!(options, :transaction_id)
+        
+        post = {}
+        add_credentials(post, options)
+        add_existing_transaction(post, options)
+        commit('ANNUL', post)
       end
 
-
-      # def purchase(money, options = {})
-      #        requires!(options, :order_id)
-      #
-      #        post = {}
-      #        add_credentials(post, options)
-      #        add_transaction(post, options)
-      #        add_order(post, money, options)
-      #        add_creditcard(post, creditcard)
-      #        commit('Sale', post)
-      #      end
-      #
-      #      def authorize(money, options = {})
-      #        requires!(options, :order_id)
-      #
-      #        post = {}
-      #        add_credentials(post, options)
-      #        add_transaction(post, options)
-      #        add_order(post, money, options)
-      #        add_creditcard(post, creditcard)
-      #        commit('Auth', post)
-      #      end
-      #
-      #      def capture(money, authorization, options = {})
-      #        post = {}
-      #        add_credentials(post, options)
-      #        add_authorization(post, authorization, money)
-      #        commit('Capture', post, false)
-      #      end
-      #
-      #      def credit(money, authorization, options = {})
-      #        post = {}
-      #        add_credentials(post, options)
-      #        add_authorization(post, authorization, money)
-      #        commit('Credit', post, false)
-      #      end
-      #
-      #      def void(authorization, options = {})
-      #        post = {}
-      #        add_credentials(post, options)
-      #        add_authorization(post, authorization)
-      #        commit('Annul', post, false)
-      #      end
 
       def test?
         @options[:test] || Base.gateway_mode == :test
       end
 
-
+      
+      # 0000000000 ========= 00000000000
+      
       private
 
       def add_credentials(post, options)
@@ -104,37 +110,42 @@ module ActiveMerchant #:nodoc:
       end
 
       def add_terminal(post, options)
+        post[:serviceType] = 'B'
         post[:orderDescription] = options[:description]
         post[:language] = options[:language] || 'nb_NO'
         post[:redirectUrl] = options[:redirect_url] || 'http://example.com'
       end
 
-      # def add_authorization(post, authorization, money=nil)
-      #       post[:transactionId] = authorization
-      #       post[:transactionAmount] = amount(money) if money
-      #     end
-
-      def add_transaction(post, options)
-        post[:transactionId] = generate_transaction_id(options)
-        post[:serviceType] = 'B'
+      def add_transaction_amount(post, money)
+        post[:transactionAmount] = money
       end
 
-
+      def add_new_transaction(post, options)
+        post[:transactionId] = generate_transaction_id(options)
+      end
+      
+      def add_existing_transaction(post, options)
+        post[:transactionId] = options[:transaction_id]
+      end
 
 
       # This communicates with Netaxept
       def commit(action, parameters)
-        parameters[:action] = action
+        parameters[:operation] = action
 
         response = {:success => false}
 
         catch(:exception) do
-
+          
           case action
-          when 'Register'
+          when 'REGISTER'
             commit_transaction_register(response, parameters)
+          when 'SALE','AUTH','CAPTURE','CREDIT','ANNUL'
+            commit_transaction_process(action, response, parameters)
+          else
+            raise ArgumentError, "Unsupported action."
           end
-          response[:success] = true
+          
         end
 
 
@@ -147,17 +158,33 @@ module ActiveMerchant #:nodoc:
         process(response, :setup)
         add_terminal_url(response, parameters)
       end
+      
+      def commit_transaction_process(action, response, parameters)
+        key = action.downcase.to_sym
+        response[key] = parse(ssl_get(build_url("Netaxept/Process.aspx", parameters)))
+        process(response, key)
+      end
 
-
+      # need to add success in here
       def process(response, key)
         if response[key][:container] =~ /Exception|Error/
           response[:message] = response[key]['Message']
           throw :exception
         else
           response[:authorization] = response[key]["TransactionId"]
+          response[:success] = was_successful?(response, key)
         end
       end
-
+      
+      def was_successful?(response, key)
+        if response[key]['ResponseCode'] && response[key]['ResponseCode'] == 'OK'
+          true
+        elsif !response[key]['ResponseCode']
+          true
+        else
+          false
+        end
+      end
 
       def add_terminal_url(response, parameters)
         params = {
