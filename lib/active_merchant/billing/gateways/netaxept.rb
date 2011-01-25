@@ -169,7 +169,12 @@ module ActiveMerchant #:nodoc:
       def process(response, key)
         if response[key][:container] =~ /Exception|Error/
           response[:message] = response[key]['Error']['Message']
-          response[:authorization] = response[key]['Error']['Result']['TransactionId']
+          
+          if response[key]['Error'] && response[key]['Error']['Result']
+            response[:authorization] = response[key]['Error']['Result']['TransactionId']
+          else
+            response[:authorization] = "error"
+          end
           throw :exception
         else
           response[:authorization] = response[key]["TransactionId"]
