@@ -87,6 +87,15 @@ module ActiveMerchant #:nodoc:
         add_existing_transaction(post, options)
         commit('ANNUL', post)
       end
+      
+      def query(options = {})
+        requires!(options, :transaction_id)
+        
+        post = {}
+        add_credentials(post, options)
+        add_existing_transaction(post, options)
+        commit('QUERY', post)
+      end
 
 
       def test?
@@ -142,6 +151,8 @@ module ActiveMerchant #:nodoc:
             commit_transaction_register(response, parameters)
           when 'SALE','AUTH','CAPTURE','CREDIT','ANNUL'
             commit_transaction_process(action, response, parameters)
+          when 'QUERY'
+            commit_transaction_query(response, parameters)
           else
             raise ArgumentError, "Unsupported action."
           end
@@ -163,6 +174,11 @@ module ActiveMerchant #:nodoc:
         key = action.downcase.to_sym
         response[key] = parse(ssl_get(build_url("Netaxept/Process.aspx", parameters)))
         process(response, key)
+      end
+      
+      def commit_transaction_query(response, parameters)
+        response[:query] = parse(ssl_get(build_url("Netaxept/Query.aspx", parameters)))
+        process(response, :query)
       end
 
       # need to add success in here

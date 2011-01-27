@@ -114,6 +114,15 @@ class NetaxeptTest < Test::Unit::TestCase
     assert(!response.success?)
     assert(response.test?)
   end
+  
+  
+  def test_successful_query_response
+    @gateway.expects(:ssl_get).returns(successful_query_response)
+    @options[:transaction_id] = @transaction_id
+    assert(response = @gateway.query(@options), "Problems running the query call.")
+    assert(response.success?)
+    assert(response.test?)
+  end
 
   # 0000000000 ========= 00000000000
   
@@ -192,5 +201,62 @@ class NetaxeptTest < Test::Unit::TestCase
     </Error>
     </Exception>)
   end
+  
+  
+  def successful_query_response
+    %(<?xml version="1.0" ?> 
+    <PaymentInfo xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema"> 
+    <MerchantId>9999997</MerchantId> 
+    <TransactionId>b127f98b77f741fca6bb49981ee6e846</TransactionId> 
+    <QueryFinished>2009-12-16T15:18:30.445625+01:00</QueryFinished> - 
+    <OrderInformation> 
+       <Amount>200</Amount> 
+       <Currency>NOK</Currency> 
+       <OrderNumber>10011</OrderNumber> 
+       <OrderDescription /> 
+    </OrderInformation> - 
+    <CustomerInformation> 
+       <Email /> <IP>91.102.26.94</IP> <PhoneNumber /> 
+       <CustomerNumber /> 
+    </CustomerInformation>
+    <Summary> 
+       <AmountCaptured>200</AmountCaptured>  
+       <AmountCredited>0</AmountCredited> 
+       <Annuled>false</Annuled>
+        <Authorized>true</Authorized> 
+       <AuthorizationId>064392</AuthorizationId> 
+    </Summary>
+     <CardInformation> 
+       <IssuerId>Visa</IssuerId> <IssuerCountry>NO</IssuerCountry> 
+       <MaskedPAN>492500******0004</MaskedPAN> 
+       <PaymentMethod>Visa</PaymentMethod> <ExpiryDate>1212</ExpiryDate> 
+    </CardInformation>
+    <History>
+       <TransactionLogLine>
+          <DateTime>2009-12-16T10:26:47.243</DateTime> <Description /> 
+          <Operation>Register</Operation> 
+          <TransactionReconRef /> 
+       </TransactionLogLine>
+    <TransactionLogLine> 
+       <DateTime>2009-12-16T11:17:54.633</DateTime> 
+       <Operation>Auth</Operation> 
+       <BatchNumber>555</BatchNumber> 
+       <TransactionReconRef /> 
+    </TransactionLogLine>
+    <TransactionLogLine> 
+       <Amount>200</Amount> 
+       <DateTime>2009-12-16T11:40:57.603</DateTime>
+       <Description /> 
+       <Operation>Capture</Operation> 
+       <BatchNumber>555</BatchNumber> 
+       <TransactionReconRef /> 
+    </TransactionLogLine> 
+    </History> 
+    <ErrorLog /> 
+    <AuthenticationInformation /> 
+    <AvtaleGiroInformation /> 
+    </PaymentInfo>)
+  end
+  
 
 end
